@@ -15,7 +15,19 @@
  *   majority, quorum fails for that item (FAQ 28).
  * - An action passes with a majority of the members present (56.108(c)), so an abstention has the
  *   same effect as a vote against.
+ * - An alternate may sit only in a seat of the same kind (scientific or nonscientific) as the primary
+ *   they replace, so substitutions never change the board's make-up.
+ *
+ * House policy (optional, stricter than the regulation): every seat must be filled, and an
+ * unaffiliated member must be present, before the board may act.
  */
+
+export interface QuorumPolicy {
+  /** Every primary seat filled (by its primary or a listed alternate) and an unaffiliated member present. */
+  requireAllSeats: boolean;
+}
+
+export const LEGAL_MINIMUM: QuorumPolicy = { requireAllSeats: false };
 
 export interface SeatMember {
   id: string;
@@ -48,6 +60,7 @@ export function countSeats(
   roster: SeatMember[],
   present: Presence[],
   recusedMemberIds: string[] = [],
+  policy: QuorumPolicy = LEGAL_MINIMUM,
 ): SeatCount {
   const primaries = roster.filter((m) => m.membershipType === "primary");
   const byId = new Map(roster.map((m) => [m.id, m]));
@@ -74,6 +87,10 @@ export function countSeats(
       problems.push(`${m.name} cannot fill ${byId.get(seat)?.name ?? "that"}'s seat while that member is present.`);
       continue;
     }
+    if (byId.get(seat)?.primaryConcern !== m.primaryConcern) {
+      problems.push(`${m.name} (${m.primaryConcern}) cannot sit in ${byId.get(seat)?.name ?? "that"}'s ${byId.get(seat)?.primaryConcern ?? ""} seat; they do not count.`);
+      continue;
+    }
     if (filledSeats.has(seat)) {
       problems.push(`Two alternates are trying to fill ${byId.get(seat)?.name ?? "the same"}'s seat.`);
       continue;
@@ -90,13 +107,25 @@ export function countSeats(
     problems.push(`Quorum needs ${majorityNeeded} of ${totalSeats} members present and voting-eligible; ${voting.length} are.`);
   }
   if (!hasNonscientist) problems.push("Quorum needs at least one nonscientist present (21 CFR 56.108(c)).");
+  let housePolicyMet = true;
+  if (policy.requireAllSeats) {
+    const empty = primaries.filter((p) => !filledSeats.has(p.id));
+    if (empty.length) {
+      housePolicyMet = false;
+      problems.push(`House policy: every seat must be filled; empty: ${empty.map((p) => `${p.name}'s seat`).join(", ")}. Call in a listed alternate.`);
+    }
+    if (!hasUnaffiliated) {
+      housePolicyMet = false;
+      problems.push("House policy: an unaffiliated member must be present and voting.");
+    }
+  }
   return {
     votingMemberIds: voting.map((m) => m.id),
     totalSeats,
     majorityNeeded,
     hasNonscientist,
     hasUnaffiliated,
-    quorum: voting.length >= majorityNeeded && hasNonscientist,
+    quorum: voting.length >= majorityNeeded && hasNonscientist && housePolicyMet,
     problems,
   };
 }
@@ -150,6 +179,7 @@ export function findEarliestSlot(
   earliest: string,
   durationMinutes: number,
   conflictedMemberIds: string[] = [],
+  policy: QuorumPolicy = LEGAL_MINIMUM,
 ): Slot | null {
   const dur = durationMinutes * 60_000;
   const from = Date.parse(earliest);
@@ -164,7 +194,7 @@ export function findEarliestSlot(
       .filter((id) => !conflictedMemberIds.includes(id));
     const freeSet = [...new Set(free)];
     const presence = assignSeats(roster, freeSet);
-    const seats = countSeats(roster, presence);
+    const seats = countSeats(roster, presence, [], policy);
     if (!seats.quorum) continue;
     const slot = {
       start: new Date(t).toISOString(),
@@ -188,7 +218,9 @@ export function assignSeats(roster: SeatMember[], freeIds: string[]): Presence[]
   for (const id of freeIds) {
     const m = byId.get(id);
     if (m?.membershipType !== "alternate") continue;
-    const seat = (m.alternateFor ?? []).find((pid) => !free.has(pid) && !taken.has(pid));
+    const seat = (m.alternateFor ?? []).find(
+      (pid) => !free.has(pid) && !taken.has(pid) && byId.get(pid)?.primaryConcern === m.primaryConcern,
+    );
     if (seat) {
       presence.push({ memberId: id, replacingMemberId: seat });
       taken.add(seat);

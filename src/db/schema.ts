@@ -670,3 +670,11 @@ export const emailOutbox = pgTable(
   },
   (t) => [index("email_outbox_status_idx").on(t.status)],
 );
+
+/** Organization-wide settings the official controls. Every change is audited. */
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedById: uuid("updated_by_id").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

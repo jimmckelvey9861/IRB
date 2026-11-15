@@ -1,8 +1,9 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { DB } from "@/db";
-import { alternateFor, availability, earnings, members, meetings, submissions } from "@/db/schema";
+import { alternateFor, availability, earnings, members, meetings, notifications, submissions } from "@/db/schema";
 import { APPROVAL_CRITERIA, type CriterionAnswer, type CriterionId } from "@/domain/review";
+import { quorumPolicy, setQuorumPolicy } from "./settings";
 import { TEST_DATABASE_URL, freshDb, makeUser } from "@/test/db";
 import { verifyAuditChain } from "./audit";
 import type { User } from "./auth/service";
@@ -85,19 +86,36 @@ run("convened meeting and pay (database)", () => {
   });
   afterAll(async () => close?.());
 
-  it("schedules at the earliest time a valid quorum is free", async () => {
-    const base = Date.now() + 3_600_000;
-    const at = (h: number) => new Date(base + h * 3_600_000);
-    // lay5 (the only unaffiliated primary) is busy; alt5 covers. lay4 is the other nonscientist.
+  const base = Date.now() + 3_600_000;
+  const at = (h: number) => new Date(base + h * 3_600_000);
+
+  it("applies the house policy (every seat filled) until the official signs a change [REQ-56.108(c)]", async () => {
+    expect(await quorumPolicy(db)).toEqual({ requireAllSeats: true });
+    // lay5 (the only unaffiliated primary) is busy; alt5 covers. lay4 is the other nonscientist. sci3 is busy.
     for (const n of ["chair", "sci2", "lay4", "alt5"]) {
       await db.insert(availability).values({ memberId: mid[n], startsAt: at(1), endsAt: at(3), onCall: n === "chair" });
     }
     await db.insert(availability).values({ memberId: mid.sci3, startsAt: at(0), endsAt: at(0.5) });
+    const blocked = await db.transaction((tx) => autoSchedule(tx, u.chair, { earliest: new Date(base) }));
+    expect(blocked.ok).toBe(false);
+
+    const official = await makeUser(db, "Olive Official", ["official"]);
+    await expect(db.transaction((tx) => setQuorumPolicy(tx, u.chair, { requireAllSeats: false }, PW))).rejects.toThrow(/official/);
+    expect((await db.transaction((tx) => setQuorumPolicy(tx, official, { requireAllSeats: false }, "wrong password 1"))).ok).toBe(false);
+    expect((await db.transaction((tx) => setQuorumPolicy(tx, official, { requireAllSeats: false }, PW))).ok).toBe(true);
+    expect(await quorumPolicy(db)).toEqual({ requireAllSeats: false });
+  });
+
+  it("schedules at the earliest time a valid quorum is free", async () => {
+    // With the legal minimum, four of five seats including a nonscientist is a quorum.
     const r = await db.transaction((tx) => autoSchedule(tx, u.chair, { earliest: new Date(base) }));
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.meeting.scheduledStart.getTime()).toBe(at(1).getTime());
       expect(r.invited).toContain(mid.alt5);
+      // Only the members called in are notified; the rest of the pool is left alone.
+      const called = await db.select().from(notifications).where(eq(notifications.dedupeKey, `meeting-invite:${r.meeting.id}`));
+      expect(called.map((n) => n.userId).sort()).toEqual(["chair", "sci2", "lay4", "alt5"].map((n) => u[n].id).sort());
     }
   });
 

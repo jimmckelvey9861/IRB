@@ -53,9 +53,11 @@ export default async function MeetingPage({ params, searchParams }: PageProps<"/
           <Card title="Quorum (21 CFR 56.108(c))">
             <p className="flex flex-wrap items-center gap-2 text-sm">
               {v.general.quorum ? <Badge tone="good">Quorum present</Badge> : <Badge tone="bad">No quorum</Badge>}
-              {v.general.votingMemberIds.length} of {v.general.totalSeats} seats filled; {v.general.majorityNeeded} needed, including a nonscientist.
+              {v.general.votingMemberIds.length} of {v.general.totalSeats} seats filled;{" "}
+              {v.policy.requireAllSeats ? "house policy: all seats, including an unaffiliated member." : `${v.general.majorityNeeded} needed, including a nonscientist.`}
               {!v.general.hasUnaffiliated && <Badge tone="warn">No unaffiliated member present</Badge>}
             </p>
+            {!v.general.quorum && <p className="mt-2 text-sm text-red-800">{v.general.problems.join(" ")}</p>}
             <ul className="mt-3 space-y-1 text-sm">
               {v.attendance.map((a) => (
                 <li key={a.id} className={a.leftAt ? "text-neutral-400 line-through" : ""}>

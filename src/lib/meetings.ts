@@ -23,6 +23,8 @@ import type { User } from "./auth/service";
 import { sha256 } from "./canonical";
 import { signRecord } from "./esign";
 import { PermissionError, requireRole } from "./members";
+import { notify } from "./notify";
+import { quorumPolicy } from "./settings";
 import { recordEarning } from "./pay";
 import { applyDecision } from "./submissions";
 
@@ -103,6 +105,7 @@ export async function autoSchedule(tx: Tx, actor: User | null, opts: { earliest?
     earliest.toISOString(),
     duration,
     conflicts.map((c) => c.memberId),
+    await quorumPolicy(tx),
   );
   if (!slot) return { ok: false as const, reason: "No time found when a valid quorum is available. Ask members to add availability." };
   const meeting = await createMeeting(tx, actor, {
@@ -110,6 +113,14 @@ export async function autoSchedule(tx: Tx, actor: User | null, opts: { earliest?
     end: new Date(slot.end),
     videoLink: opts.videoLink ?? "",
     submissionIds: agenda.map((a) => a.submission.id),
+  });
+  // Call in only the members the slot needs (primaries first, then their alternates), so the pool
+  // can be much larger than the board that convenes.
+  await notify(tx, roster.filter((m) => slot.memberIds.includes(m.id)).map((m) => m.userId), {
+    subject: `You are called to a board meeting on ${slot.start.slice(0, 16).replace("T", " ")} UTC`,
+    body: `${agenda.length} item(s) on the agenda. Review the materials before joining; you count toward quorum only if you have.`,
+    link: `/meetings/${meeting.id}`,
+    dedupeKey: `meeting-invite:${meeting.id}`,
   });
   return { ok: true as const, meeting, invited: slot.memberIds };
 }
@@ -238,7 +249,7 @@ export async function itemSeats(tx: Tx, itemId: string) {
   const { item, study } = await loadItem(tx, itemId);
   const roster = await seatRoster(tx);
   const present = await currentPresence(tx, item.meetingId);
-  return countSeats(roster, present, await recusedFor(tx, itemId, study.id));
+  return countSeats(roster, present, await recusedFor(tx, itemId, study.id), await quorumPolicy(tx));
 }
 
 /** A member declares a conflict during the meeting and steps out for this item (21 CFR 56.107(e)). */
@@ -493,7 +504,8 @@ export async function meetingView(tx: Tx, meetingId: string) {
   const roster = await seatRoster(tx);
   const attendance = await tx.select().from(meetingAttendance).where(eq(meetingAttendance.meetingId, meetingId));
   const present = await currentPresence(tx, meetingId);
-  const general = countSeats(roster, present);
+  const policy = await quorumPolicy(tx);
+  const general = countSeats(roster, present, [], policy);
   const perItem = await Promise.all(
     items.map(async (i) => ({
       itemId: i.item.id,
@@ -501,7 +513,7 @@ export async function meetingView(tx: Tx, meetingId: string) {
       votes: await tx.select().from(votes).where(eq(votes.itemId, i.item.id)),
     })),
   );
-  return { meeting, items, roster, attendance, general, perItem };
+  return { meeting, items, roster, attendance, general, perItem, policy };
 }
 
 export async function listMeetings(tx: Tx) {

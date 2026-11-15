@@ -1,14 +1,16 @@
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth/session";
 import { boardStatus } from "@/lib/members";
+import { quorumPolicy } from "@/lib/settings";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Card, ErrorNote, Field, PrimaryButton, Select } from "@/components/ui";
-import { addMember, appoint, toggleExperienced } from "./actions";
+import { addMember, appoint, changeQuorumPolicy, toggleExperienced } from "./actions";
 
 export default async function RosterPage({ searchParams }: PageProps<"/roster">) {
   const user = await requireUser();
   const { error, ok } = await searchParams;
   const { roster, report } = await boardStatus(db);
+  const policy = await quorumPolicy(db);
   const primaries = roster.filter((m) => m.membershipType === "primary");
   const nameOf = (id: string) => roster.find((m) => m.id === id)?.name ?? "unknown";
   const isAdmin = user.roles.includes("administrator");
@@ -40,6 +42,26 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
                 </li>
               ))}
             </ul>
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card title="Quorum for full-board meetings (21 CFR 56.108(c))">
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            <li>The board has {primaries.length} seats. Quorum is a majority of seats ({Math.floor(primaries.length / 2) + 1}), counted per agenda item, and must include a nonscientist.</li>
+            <li>Members of the pool sit only as the primary for a seat or as an alternate listed for it, and only in a seat of the same kind. A seat counts once.</li>
+            <li>Attendance must be live (in person, video or phone) with the materials reviewed; recused members do not count.</li>
+            <li>
+              House policy: {policy.requireAllSeats ? <Badge tone="good">on</Badge> : <Badge tone="neutral">off</Badge>} every seat filled and an unaffiliated member present before the board acts.
+            </li>
+          </ul>
+          {isOfficial && (
+            <form action={changeQuorumPolicy} className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <input type="hidden" name="requireAllSeats" value={policy.requireAllSeats ? "no" : "yes"} />
+              <input name="password" type="password" required placeholder="Your password, to sign" className="rounded border border-neutral-300 px-2 py-2 dark:border-neutral-700" />
+              <button className="rounded-md border border-neutral-400 px-3 py-2">{policy.requireAllSeats ? "Turn off the house policy (legal minimum only)" : "Turn on the house policy"}</button>
+            </form>
           )}
         </Card>
       </div>

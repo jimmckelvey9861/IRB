@@ -71,6 +71,13 @@
       "when": 1794783554350,
       "tag": "0009_email_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794784539233,
+      "tag": "0010_settings",
+      "breakpoints": true
     }
   ]
 }
