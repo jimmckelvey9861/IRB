@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed-demo.ts",
-    "daily": "tsx scripts/daily.ts"
+    "daily": "tsx scripts/daily.ts",
+    "validate": "vitest run --reporter=default --reporter=json --outputFile.json=validation/results.json; tsx scripts/validation-report.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",

@@ -8,7 +8,9 @@ import { APPROVAL_CRITERIA, type CriterionAnswer, type CriterionId } from "@/dom
 import { TEST_DATABASE_URL, freshDb, makeUser } from "@/test/db";
 import { verifyAuditChain } from "./audit";
 import type { User } from "./auth/service";
+import { addMonthsIso } from "@/domain/training";
 import {
+  closeStudy,
   createFollowOnSubmission,
   determineEvent,
   fileEventReport,
@@ -214,6 +216,17 @@ run("continuing review and problem reports (database)", () => {
     expect(signed.ok).toBe(true);
     expect((await studyOversight(db, official, studyId)).reports.find((r) => r.id === staffView.reports[0].id)!.status).toBe("signed");
     expect((await verifyAuditChain(db)).ok).toBe(true);
+  });
+
+  it("closes a finished study and starts the 3-year retention clock [REQ-56.115(b)]", async () => {
+    await expect(db.transaction((tx) => closeStudy(tx, member, studyId, "All 40 participants completed follow-up."))).rejects.toThrow(/investigator or the chair/);
+    await expect(db.transaction((tx) => closeStudy(tx, pi, studyId, "short"))).rejects.toThrow(/final report/);
+    const until = await db.transaction((tx) => closeStudy(tx, pi, studyId, "All 40 participants completed follow-up; no new problems."));
+    expect(until).toBe(addMonthsIso(isoToday(), 36));
+    const s = await expiry();
+    expect(s.status).toBe("closed");
+    expect(s.retainUntil).toBe(until);
+    await expect(db.transaction((tx) => closeStudy(tx, pi, studyId, "All 40 participants completed follow-up again."))).rejects.toThrow(/already closed/);
   });
 
   it("keeps investigators out of other investigators' studies", async () => {

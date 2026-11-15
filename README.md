@@ -9,6 +9,7 @@ qualified human members, as the regulations require.
 
 - Plan and requirements map: [IRB software: requirements map and build plan](https://claude.ai/artifact/EuyWv1JJ5PPy3NUzCQyEqV)
 - Rule-to-code traceability: [docs/requirements.md](docs/requirements.md)
+- Validation (21 CFR 11.10(a)): [docs/validation/plan.md](docs/validation/plan.md); `npm run validate` produces the OQ report
 
 ## Status
 

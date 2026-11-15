@@ -6,7 +6,7 @@ import { db } from "@/db";
 import type { EventKind } from "@/domain/oversight";
 import { requireUser } from "@/lib/auth/session";
 import { markRead } from "@/lib/notify";
-import { createFollowOnSubmission, determineEvent, fileEventReport, signRegulatoryReport } from "@/lib/oversight";
+import { closeStudy, createFollowOnSubmission, determineEvent, fileEventReport, signRegulatoryReport } from "@/lib/oversight";
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 function back(studyId: string, key: "ok" | "error", text: string, anchor = ""): never {
@@ -110,4 +110,16 @@ export async function dismissNotice(formData: FormData) {
   const actor = await requireUser();
   await markRead(db, actor.id, String(formData.get("id")));
   revalidatePath("/");
+}
+
+export async function close(formData: FormData) {
+  const actor = await requireUser();
+  const studyId = String(formData.get("studyId"));
+  let until = "";
+  try {
+    until = await db.transaction((tx) => closeStudy(tx, actor, studyId, String(formData.get("finalReport") ?? "")));
+  } catch (e) {
+    back(studyId, "error", msg(e));
+  }
+  back(studyId, "ok", `Study closed. Its records will be kept until at least ${until}.`);
 }

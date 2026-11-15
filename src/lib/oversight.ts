@@ -13,6 +13,7 @@ import {
   type RegulatoryReportKind,
 } from "@/domain/oversight";
 import { isoToday } from "@/domain/roster";
+import { addMonthsIso } from "@/domain/training";
 import { recordAudit } from "./audit";
 import type { User } from "./auth/service";
 import { sha256 } from "./canonical";
@@ -321,6 +322,34 @@ export async function signRegulatoryReport(tx: Tx, actor: User, reportId: string
     .where(eq(regulatoryReports.id, reportId));
   await audit(tx, actor, "regulatory_report.signed", "regulatory_report", reportId, { signatureId: sig.signature.id });
   return { ok: true as const };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Closing a study
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The investigator closes a study when all research activity, including follow-up and analysis of
+ * identifiable data, has ended. Records must then be kept at least 3 years (21 CFR 56.115(b)).
+ */
+export async function closeStudy(tx: Tx, actor: User, studyId: string, finalReport: string) {
+  const study = await loadStudy(tx, studyId);
+  if (study.principalInvestigatorId !== actor.id && !actor.roles.includes("chair")) {
+    throw new PermissionError("Only the study's investigator or the chair can close a study.");
+  }
+  if (study.status === "closed") throw new Error("This study is already closed.");
+  if (finalReport.trim().length < 20) throw new Error("Write a short final report: how many took part, and any problems not yet reported.");
+  const open = await tx.select().from(submissions).where(eq(submissions.studyId, studyId));
+  if (open.some((s) => (OPEN_STATUSES as readonly string[]).includes(s.status) && s.status !== "draft")) {
+    throw new Error("A submission for this study is still under review.");
+  }
+  const pending = await tx.select().from(eventReports).where(and(eq(eventReports.studyId, studyId), eq(eventReports.status, "awaiting_determination")));
+  if (pending.length) throw new Error("A problem report for this study still needs a determination.");
+  const retainUntil = addMonthsIso(isoToday(), 36);
+  await tx.update(studies).set({ status: "closed", retainUntil }).where(eq(studies.id, studyId));
+  await audit(tx, actor, "study.closed", "study", studyId, { status: "closed", retainUntil, finalReport: finalReport.trim() }, { status: study.status });
+  await notify(tx, await usersWithRole(tx, "chair"), { subject: `${study.irbNumber} closed`, body: finalReport.trim().slice(0, 200), link: `/studies/${studyId}` });
+  return retainUntil;
 }
 
 // ---------------------------------------------------------------------------------------------

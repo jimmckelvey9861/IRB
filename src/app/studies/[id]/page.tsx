@@ -8,7 +8,7 @@ import { studyOversight } from "@/lib/oversight";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status";
 import { Badge, Card, ErrorNote, PrimaryButton } from "@/components/ui";
-import { determine, reportEvent, signReport, startFollowOn } from "../actions";
+import { close, determine, reportEvent, signReport, startFollowOn } from "../actions";
 
 const input = "mt-1 w-full rounded border border-neutral-300 bg-transparent px-2 py-2 dark:border-neutral-700";
 const KIND = { initial: "Initial review", amendment: "Amendment", continuing: "Continuing review" } as const;
@@ -187,6 +187,19 @@ export default async function StudyPage({ params, searchParams }: PageProps<"/st
             </details>
           )}
         </Card>
+        {study.status !== "closed" && (isPi || user.roles.includes("chair")) && study.approvalExpiresOn && (
+          <details className="rounded-lg border border-neutral-200 p-5 text-sm dark:border-neutral-800">
+            <summary className="cursor-pointer font-semibold">Close the study (all research activity has ended)</summary>
+            <form action={close} className="mt-3 space-y-3">
+              <input type="hidden" name="studyId" value={study.id} />
+              <label className="block">Final report: how many took part, how many completed, and any problems not yet reported
+                <textarea name="finalReport" rows={3} required className={input} />
+              </label>
+              <PrimaryButton>Close the study</PrimaryButton>
+            </form>
+          </details>
+        )}
+        {study.retainUntil && <p className="text-sm text-neutral-500">Closed. Records kept until at least {study.retainUntil} (21 CFR 56.115(b)).</p>}
       </div>
     </AppShell>
   );
