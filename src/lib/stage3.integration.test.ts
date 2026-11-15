@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { DB } from "@/db";
-import { complaints, eventReports, members, notifications, policyVersions } from "@/db/schema";
+import { complaints, emailOutbox, eventReports, members, notifications, policyVersions } from "@/db/schema";
 import { STARTER_POLICIES } from "@/domain/policy-library";
 import { isoToday } from "@/domain/roster";
 import { addMonthsIso } from "@/domain/training";
@@ -10,6 +10,7 @@ import { verifyAuditChain } from "./audit";
 import type { User } from "./auth/service";
 import { complaintByReference, linkComplaintToStudy, listComplaints, respondToComplaint, submitComplaint } from "./complaints";
 import { runDailyJobs } from "./daily";
+import { deliverEmails, MAX_ATTEMPTS } from "./email";
 import {
   acknowledgePolicy,
   approvePolicyVersion,
@@ -154,6 +155,24 @@ run("policies, training, complaints and quality review (database)", () => {
     expect(matched.studyId).toBe(study.id);
     await expect(listComplaints(db, pi)).rejects.toThrow();
     expect(await listComplaints(db, official)).toHaveLength(2);
+  });
+
+  it("emails every notice and retries failed sends", async () => {
+    const queued = await db.select().from(emailOutbox).where(eq(emailOutbox.status, "queued"));
+    expect(queued.length).toBeGreaterThan(0);
+    expect(queued.every((e) => e.toEmail.endsWith("@example.test"))).toBe(true);
+    expect(queued[0].body).toMatch(/no participant information/);
+
+    const sentTo: string[] = [];
+    let fail = true;
+    const flaky = { send: async (to: string) => { if (fail) throw new Error("SMTP down"); sentTo.push(to); } };
+    for (let i = 0; i < MAX_ATTEMPTS - 1; i++) await deliverEmails(db, flaky, 1);
+    const [first] = await db.select().from(emailOutbox).where(eq(emailOutbox.id, queued.sort((a, b) => +a.createdAt - +b.createdAt)[0].id));
+    expect(first).toMatchObject({ status: "queued", attempts: MAX_ATTEMPTS - 1, lastError: "SMTP down" });
+    fail = false;
+    const r = await deliverEmails(db, flaky, 1000);
+    expect(r.sent).toBe(queued.length);
+    expect((await db.select().from(emailOutbox).where(eq(emailOutbox.status, "queued"))).length).toBe(0);
   });
 
   it("measures the program and records a signed quarterly review [REQ-AAHRPP-I-5]", async () => {

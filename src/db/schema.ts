@@ -650,3 +650,23 @@ export const qaReviews = pgTable("qa_reviews", {
   signatureId: uuid("signature_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const emailStatus = pgEnum("email_status", ["queued", "sent", "failed"]);
+
+/** Email copies of notices, sent by the worker. Notices carry no participant information. */
+export const emailOutbox = pgTable(
+  "email_outbox",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    notificationId: uuid("notification_id").references(() => notifications.id),
+    toEmail: text("to_email").notNull(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    status: emailStatus("status").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (t) => [index("email_outbox_status_idx").on(t.status)],
+);

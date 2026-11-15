@@ -154,6 +154,7 @@ export default async function StudyPage({ params, searchParams }: PageProps<"/st
                         <Badge tone={r.status === "signed" ? "good" : "warn"}>{r.status}</Badge> {REPORT_LABELS[r.kind]}
                       </summary>
                       <pre className="mt-2 text-xs whitespace-pre-wrap">{r.body}</pre>
+                      <a className="mt-2 inline-block text-xs underline" href={`/reports/${r.id}/pdf`}>Download as PDF to send</a>
                       {r.status === "draft" && isOfficial && (
                         <form action={signReport} className="mt-2 flex flex-wrap gap-2">
                           <input type="hidden" name="studyId" value={study.id} />

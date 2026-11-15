@@ -205,7 +205,7 @@ export default async function MeetingPage({ params, searchParams }: PageProps<"/
         {v.meeting.minutes && (
           <Card title="Minutes">
             <pre className="text-xs whitespace-pre-wrap">{v.meeting.minutes}</pre>
-            <p className="mt-2 font-mono text-xs text-neutral-500">Signed by the chair · fingerprint {v.meeting.minutesHash?.slice(0, 16)}</p>
+            <p className="mt-2 font-mono text-xs text-neutral-500">Signed by the chair · fingerprint {v.meeting.minutesHash?.slice(0, 16)} · <a className="underline" href={`/meetings/${id}/minutes.pdf`}>PDF</a></p>
           </Card>
         )}
       </div>

@@ -104,7 +104,7 @@ export default async function SubmissionPage({ params, searchParams }: PageProps
         {detail.letters.map((l) => (
           <Card key={l.id} title={`Letter: ${l.subject}`}>
             <pre className="text-sm whitespace-pre-wrap">{l.body}</pre>
-            <p className="mt-2 font-mono text-xs text-neutral-500">Issued {l.issuedAt.toISOString().slice(0, 16).replace("T", " ")} UTC · fingerprint {l.bodyHash.slice(0, 16)}</p>
+            <p className="mt-2 font-mono text-xs text-neutral-500">Issued {l.issuedAt.toISOString().slice(0, 16).replace("T", " ")} UTC · fingerprint {l.bodyHash.slice(0, 16)} · <a className="underline" href={`/letters/${l.id}/pdf`}>PDF</a></p>
           </Card>
         ))}
 

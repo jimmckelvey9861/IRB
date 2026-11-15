@@ -9,6 +9,7 @@ qualified human members, as the regulations require.
 
 - Plan and requirements map: [IRB software: requirements map and build plan](https://claude.ai/artifact/EuyWv1JJ5PPy3NUzCQyEqV)
 - Rule-to-code traceability: [docs/requirements.md](docs/requirements.md)
+- Hosting plan (AWS under a HIPAA business associate agreement): [docs/hosting.md](docs/hosting.md)
 - Validation (21 CFR 11.10(a)): [docs/validation/plan.md](docs/validation/plan.md); `npm run validate` produces the OQ report
 
 ## Status
@@ -34,6 +35,10 @@ Stages 1 (core review loop) and 2 (meetings, oversight, pay) are built; stage 3 
 - Training records with 3-year renewal and reminders; untrained or expired members are not assigned reviews
 - Public page (`/concern`) where participants can raise a complaint or question without signing in and check for the reply with a reference code
 - Quality dashboard with targets and a signed quarterly review
+- PDF copies of letters, minutes and FDA reports, with signature lines
+- Email copies of every notice, sent by a background worker with retries (no participant information in emails)
+- Study closure with a final report, starting the 3-year records retention date
+- Validation package: plan, user acceptance scripts, and an automatically generated OQ report
 - Member earnings: flat rate per completed review or meeting plus an on-call stipend, paid weekly, never tied to the decision
 
 **Use made-up data only** until the system runs on a HIPAA-covered hosting account.
@@ -48,7 +53,8 @@ cp .env.example .env.local       # adjust the database URLs
 npm run db:migrate
 npm run db:seed                  # made-up demo users and members
 npm run dev
-npm run daily                    # renewal reminders and lapse check; schedule once a day in production
+npm run daily                    # reminders and lapse check; in production the worker runs this
+npm run worker                   # optional: sends queued emails (needs SMTP_URL) and runs the daily jobs
 ```
 
 Demo accounts (all `@demo.test`, password printed by the seed script): `admin` adds members, `official`

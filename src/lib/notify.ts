@@ -1,6 +1,9 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Tx } from "@/db";
-import { notifications, users } from "@/db/schema";
+import { emailOutbox, notifications, users } from "@/db/schema";
+
+/** Where the app is served, for links in emails. */
+export const APP_URL = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 export interface Notice {
   subject: string;
@@ -17,7 +20,19 @@ export async function notify(tx: Tx, userIds: string[], n: Notice): Promise<numb
     .insert(notifications)
     .values([...new Set(userIds)].map((userId) => ({ userId, subject: n.subject, body: n.body ?? "", link: n.link ?? "", dedupeKey: n.dedupeKey ?? null })))
     .onConflictDoNothing()
-    .returning({ id: notifications.id });
+    .returning({ id: notifications.id, userId: notifications.userId });
+  if (rows.length) {
+    const people = await tx.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, rows.map((r) => r.userId)));
+    const url = n.link ? `${APP_URL}${n.link}` : APP_URL;
+    await tx.insert(emailOutbox).values(
+      rows.map((r) => ({
+        notificationId: r.id,
+        toEmail: people.find((p) => p.id === r.userId)!.email,
+        subject: n.subject,
+        body: [n.body ?? "", "", `Open: ${url}`, "", "Sign in to see details. This message contains no participant information."].join("\n"),
+      })),
+    );
+  }
   return rows.length;
 }
 
