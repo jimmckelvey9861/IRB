@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth/session";
 import { boardStatus } from "@/lib/members";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Card, ErrorNote, Field, PrimaryButton, Select } from "@/components/ui";
-import { addMember, appoint } from "./actions";
+import { addMember, appoint, toggleExperienced } from "./actions";
 
 export default async function RosterPage({ searchParams }: PageProps<"/roster">) {
   const user = await requireUser();
@@ -13,6 +13,7 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
   const nameOf = (id: string) => roster.find((m) => m.id === id)?.name ?? "unknown";
   const isAdmin = user.roles.includes("administrator");
   const isOfficial = user.roles.includes("official");
+  const isChair = user.roles.includes("chair");
 
   return (
     <AppShell user={user}>
@@ -53,6 +54,7 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
               <th className="py-2 pr-4">Affiliated</th>
               <th className="py-2 pr-4">Profession</th>
               <th className="py-2 pr-4">Training</th>
+              <th className="py-2 pr-4" title="Designated by the chair to do expedited reviews (21 CFR 56.110(b))">Expedited reviewer</th>
               <th className="py-2">Status</th>
             </tr>
           </thead>
@@ -70,6 +72,19 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
                 <td className="py-2 pr-4">{m.affiliated ? "Yes" : "No"}</td>
                 <td className="py-2 pr-4">{m.profession}</td>
                 <td className="py-2 pr-4">{m.trainingCompletedOn ?? <Badge tone="warn">none</Badge>}</td>
+                <td className="py-2 pr-4">
+                  {isChair ? (
+                    <form action={toggleExperienced}>
+                      <input type="hidden" name="memberId" value={m.id} />
+                      <input type="hidden" name="value" value={m.experiencedReviewer ? "no" : "yes"} />
+                      <button className="underline">{m.experiencedReviewer ? "Yes (remove)" : "No (designate)"}</button>
+                    </form>
+                  ) : m.experiencedReviewer ? (
+                    "Yes"
+                  ) : (
+                    "No"
+                  )}
+                </td>
                 <td className="py-2">
                   {m.status === "active" && <Badge tone="good">Appointed</Badge>}
                   {m.status === "inactive" && <Badge tone="neutral">Inactive</Badge>}
@@ -95,7 +110,7 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
             ))}
             {roster.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-neutral-500">
+                <td colSpan={8} className="py-6 text-center text-neutral-500">
                   No members yet.
                 </td>
               </tr>

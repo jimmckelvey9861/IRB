@@ -19,6 +19,12 @@ Stage 1 (core review loop) is in progress. Done so far:
 - Electronic signatures that re-check the password and are bound to the exact record signed (21 CFR 11.50, 11.70, 11.200)
 - Board roster with alternates, and automatic composition checks against 21 CFR 56.107 and FDA's alternate-member guidance
 - Member appointment by electronic signature of the organizational official (AAHRPP I.1.B)
+- Study submission with an automatic consent form check against 21 CFR 50.25; incomplete forms cannot be sent
+- Automatic review path (expedited or full board) and instant reviewer assignment by expertise and workload
+- Conflict-of-interest declaration before a reviewer sees a study; conflicted reviewers are replaced at once
+- Approval-criteria checklist (21 CFR 56.111) with no answers pre-filled, signed electronically
+- Expedited decisions issue the investigator's letter immediately; full-board studies wait for the meeting (stage 2)
+- Phone-friendly review screens
 
 **Use made-up data only** until the system runs on a HIPAA-covered hosting account.
 
@@ -34,8 +40,8 @@ npm run db:seed                  # made-up demo users and members
 npm run dev
 ```
 
-Sign in as `admin@demo.test` (adds members) or `official@demo.test` (appoints members) with the
-password printed by the seed script. The first sign-in asks you to add the account to an
+Demo accounts (all `@demo.test`, password printed by the seed script): `admin` adds members, `official`
+appoints them, `investigator` submits studies, `dr.maya.patel` is the chair and an expedited reviewer. The first sign-in asks you to add the account to an
 authenticator app.
 
 ## Checks

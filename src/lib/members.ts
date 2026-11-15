@@ -154,7 +154,9 @@ export async function deactivateMember(tx: Tx, actor: User, memberId: string, re
   });
 }
 
-export async function loadRoster(tx: Tx): Promise<(RosterMember & { email: string; expertise: string[]; degrees: string })[]> {
+export async function loadRoster(
+  tx: Tx,
+): Promise<(RosterMember & { email: string; expertise: string[]; degrees: string; experiencedReviewer: boolean })[]> {
   const rows = await tx
     .select({ member: members, user: users })
     .from(members)
@@ -176,6 +178,7 @@ export async function loadRoster(tx: Tx): Promise<(RosterMember & { email: strin
     degrees: member.degrees,
     gender: member.gender,
     expertise: member.expertise,
+    experiencedReviewer: member.experiencedReviewer,
     trainingCompletedOn: member.trainingCompletedOn,
     termEndsOn: member.termEndsOn,
     alternateFor: links.filter((l) => l.alternateMemberId === member.id).map((l) => l.primaryMemberId),

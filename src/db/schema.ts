@@ -21,12 +21,14 @@ import {
  * - official: the AAHRPP "organizational official" (AAHRPP I.1.B); signs member appointments
  * - chair: IRB chair; may designate experienced reviewers (21 CFR 56.110(b))
  * - member: a voting IRB member (primary or alternate)
+ * - investigator: a researcher who submits studies (cannot see other studies or IRB deliberations)
  */
 export const systemRole = pgEnum("system_role", [
   "administrator",
   "official",
   "chair",
   "member",
+  "investigator",
 ]);
 
 export const users = pgTable(
@@ -152,3 +154,128 @@ export const signatures = pgTable(
   },
   (t) => [index("signatures_entity_idx").on(t.entityType, t.entityId)],
 );
+
+export const studyStatus = pgEnum("study_status", ["active", "closed"]);
+
+/** A research study (protocol) overseen by the IRB. */
+export const studies = pgTable("studies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  irbNumber: text("irb_number").notNull().unique(),
+  title: text("title").notNull(),
+  sponsor: text("sponsor").notNull(),
+  principalInvestigatorId: uuid("principal_investigator_id")
+    .notNull()
+    .references(() => users.id),
+  /** Expertise needed to review it, matched against member expertise (AAHRPP II.1.E). */
+  expertise: text("expertise").array().notNull().default(sql`'{}'::text[]`),
+  status: studyStatus("status").notNull().default("active"),
+  /** Approval lapses after this date unless renewed (21 CFR 56.109(f)). */
+  approvalExpiresOn: date("approval_expires_on"),
+  /** Records may not be destroyed before this date (21 CFR 56.115(b): 3 years after completion). */
+  retainUntil: date("retain_until"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const submissionKind = pgEnum("submission_kind", ["initial", "amendment"]);
+export const submissionStatus = pgEnum("submission_status", [
+  "draft",
+  "in_review",
+  "awaiting_meeting",
+  "modifications_required",
+  "approved",
+  "disapproved",
+]);
+export const reviewPath = pgEnum("review_path", ["expedited", "full_board"]);
+
+export const submissions = pgTable(
+  "submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    studyId: uuid("study_id")
+      .notNull()
+      .references(() => studies.id),
+    kind: submissionKind("kind").notNull(),
+    status: submissionStatus("status").notNull().default("draft"),
+    submittedById: uuid("submitted_by_id")
+      .notNull()
+      .references(() => users.id),
+    summary: text("summary").notNull(),
+    protocolText: text("protocol_text").notNull().default(""),
+    consentText: text("consent_text").notNull().default(""),
+    minimalRisk: boolean("minimal_risk").notNull(),
+    expeditedCategory: integer("expedited_category"),
+    minorChange: boolean("minor_change").notNull().default(false),
+    applicableClinicalTrial: boolean("applicable_clinical_trial").notNull().default(true),
+    involvesChildren: boolean("involves_children").notNull().default(false),
+    involvesVulnerable: boolean("involves_vulnerable").notNull().default(false),
+    /** Where the submitter says each element the checker could not find is covered. */
+    consentResolutions: jsonb("consent_resolutions").notNull().default(sql`'[]'::jsonb`),
+    path: reviewPath("path"),
+    pathBasis: text("path_basis"),
+    consultantNeeded: boolean("consultant_needed").notNull().default(false),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("submissions_study_idx").on(t.studyId)],
+);
+
+/** A member's conflict-of-interest declaration for a study (21 CFR 56.107(e); AAHRPP II.1.D). */
+export const conflictDeclarations = pgTable(
+  "conflict_declarations",
+  {
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id),
+    studyId: uuid("study_id")
+      .notNull()
+      .references(() => studies.id),
+    hasConflict: boolean("has_conflict").notNull(),
+    details: text("details").notNull().default(""),
+    declaredAt: timestamp("declared_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.memberId, t.studyId] })],
+);
+
+export const assignmentRole = pgEnum("assignment_role", ["primary_reviewer", "secondary_reviewer"]);
+export const assignmentStatus = pgEnum("assignment_status", ["assigned", "completed", "withdrawn_conflict"]);
+export const decision = pgEnum("decision", ["approve", "require_modifications", "disapprove", "refer_to_full_board"]);
+
+export const reviewAssignments = pgTable(
+  "review_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => submissions.id),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id),
+    role: assignmentRole("role").notNull(),
+    status: assignmentStatus("status").notNull().default("assigned"),
+    reason: text("reason").notNull().default(""),
+    /** Answers to the 21 CFR 56.111 approval criteria. */
+    answers: jsonb("answers").notNull().default(sql`'{}'::jsonb`),
+    notes: text("notes").notNull().default(""),
+    decision: decision("decision"),
+    explanation: text("explanation"),
+    approvalMonths: integer("approval_months"),
+    confirmsExpedited: boolean("confirms_expedited"),
+    signatureId: uuid("signature_id"),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [index("assignments_member_idx").on(t.memberId), index("assignments_submission_idx").on(t.submissionId)],
+);
+
+/** Letters to investigators, generated from decisions (21 CFR 56.109(e)). */
+export const letters = pgTable("letters", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  submissionId: uuid("submission_id")
+    .notNull()
+    .references(() => submissions.id),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  bodyHash: text("body_hash").notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+});

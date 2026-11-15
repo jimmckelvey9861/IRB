@@ -3,9 +3,9 @@
  *
  *   npm run db:seed
  */
-import { count } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { createDb } from "../src/db";
-import { users } from "../src/db/schema";
+import { members, users } from "../src/db/schema";
 import { hashPassword } from "../src/lib/auth/password";
 import { createMember } from "../src/lib/members";
 
@@ -26,9 +26,10 @@ async function main() {
     .insert(users)
     .values({ email: "admin@demo.test", fullName: "Demo Administrator", passwordHash: hash, roles: ["administrator"] })
     .returning();
-  await db
-    .insert(users)
-    .values({ email: "official@demo.test", fullName: "Demo Official", passwordHash: hash, roles: ["official"] });
+  await db.insert(users).values([
+    { email: "official@demo.test", fullName: "Demo Official", passwordHash: hash, roles: ["official"] },
+    { email: "investigator@demo.test", fullName: "Dr. Demo Investigator", passwordHash: hash, roles: ["investigator"] },
+  ]);
 
   const people = [
     { fullName: "Dr. Maya Patel", profession: "physician", degrees: "MD", primaryConcern: "scientific", affiliated: true, expertise: ["oncology"], gender: "female" },
@@ -52,6 +53,9 @@ async function main() {
     );
     ids[p.fullName] = m.id;
   }
+  // Dr. Patel also serves as chair; as chair she has designated herself an experienced reviewer.
+  await db.update(users).set({ roles: ["member", "chair"] }).where(eq(users.email, "dr.maya.patel@demo.test"));
+  await db.update(members).set({ experiencedReviewer: true }).where(eq(members.id, ids["Dr. Maya Patel"]));
   await db.transaction((tx) =>
     createMember(tx, admin, {
       fullName: "Pastor James Whitfield",
@@ -69,7 +73,7 @@ async function main() {
     }),
   );
   await pool.end();
-  console.log(`Demo data loaded. Sign in as admin@demo.test or official@demo.test with password "${PASSWORD}".`);
+  console.log(`Demo data loaded. Accounts: admin@, official@, investigator@, dr.maya.patel@ (chair, member), all @demo.test, password "${PASSWORD}".`);
   console.log("Members are pending appointment; sign in as the official to appoint them.");
 }
 

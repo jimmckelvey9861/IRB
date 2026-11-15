@@ -57,3 +57,17 @@ export async function appoint(formData: FormData) {
   revalidatePath("/roster");
   back({ ok: "Appointment signed." });
 }
+
+export async function toggleExperienced(formData: FormData) {
+  const actor = await requireUser();
+  const { setExperiencedReviewer } = await import("@/lib/submissions");
+  try {
+    await db.transaction((tx) =>
+      setExperiencedReviewer(tx, actor, String(formData.get("memberId")), formData.get("value") === "yes"),
+    );
+  } catch (e) {
+    back({ error: (e as Error).message });
+  }
+  revalidatePath("/roster");
+  back({ ok: "Expedited reviewer designation updated." });
+}

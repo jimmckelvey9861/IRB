@@ -22,6 +22,20 @@
       "when": 1794762878594,
       "tag": "0002_session_enrollment",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794763459046,
+      "tag": "0003_studies_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794763527017,
+      "tag": "0004_letters_immutable",
+      "breakpoints": true
     }
   ]
 }
