@@ -36,6 +36,20 @@
       "when": 1794763527017,
       "tag": "0004_letters_immutable",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794780563450,
+      "tag": "0005_meetings_pay",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794780640913,
+      "tag": "0006_motion_history",
+      "breakpoints": true
     }
   ]
 }

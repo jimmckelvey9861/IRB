@@ -279,3 +279,174 @@ export const letters = pgTable("letters", {
   bodyHash: text("body_hash").notNull(),
   issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------------------------
+// Stage 2: convened meetings, availability, member pay
+// ---------------------------------------------------------------------------------------------
+
+export const meetingStatus = pgEnum("meeting_status", ["scheduled", "in_progress", "adjourned", "cancelled"]);
+
+export const meetings = pgTable("meetings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  scheduledStart: timestamp("scheduled_start", { withTimezone: true }).notNull(),
+  scheduledEnd: timestamp("scheduled_end", { withTimezone: true }).notNull(),
+  /** Link to the HIPAA-eligible video service. */
+  videoLink: text("video_link").notNull().default(""),
+  status: meetingStatus("status").notNull().default("scheduled"),
+  chairMemberId: uuid("chair_member_id").references(() => members.id),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  minutes: text("minutes"),
+  minutesHash: text("minutes_hash"),
+  minutesSignatureId: uuid("minutes_signature_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const attendanceMode = pgEnum("attendance_mode", ["in_person", "video", "phone"]);
+
+export const meetingAttendance = pgTable(
+  "meeting_attendance",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meetings.id),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id),
+    mode: attendanceMode("mode").notNull(),
+    /** Alternates: the absent primary whose seat they fill. */
+    replacingMemberId: uuid("replacing_member_id").references(() => members.id),
+    /** The member confirmed they received and reviewed the materials (FDA IRB FAQ 14). */
+    hasMaterials: boolean("has_materials").notNull(),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+    leftAt: timestamp("left_at", { withTimezone: true }),
+  },
+  (t) => [index("attendance_meeting_idx").on(t.meetingId)],
+);
+
+export const itemStatus = pgEnum("item_status", ["pending", "voting", "decided", "tabled"]);
+export const motion = pgEnum("motion", ["approve", "require_modifications", "disapprove", "table"]);
+
+export const meetingItems = pgTable(
+  "meeting_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meetings.id),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => submissions.id),
+    position: integer("position").notNull(),
+    status: itemStatus("status").notNull().default("pending"),
+    motion: motion("motion"),
+    answers: jsonb("answers").notNull().default(sql`'{}'::jsonb`),
+    explanation: text("explanation"),
+    controvertedIssues: text("controverted_issues"),
+    approvalMonths: integer("approval_months"),
+    childrenCategory: text("children_category"),
+    votesFor: integer("votes_for"),
+    votesAgainst: integer("votes_against"),
+    votesAbstain: integer("votes_abstain"),
+    votingPresent: integer("voting_present"),
+    passed: boolean("passed"),
+    /** Every motion put to a vote on this item, including failed ones (AAHRPP II.5.B). */
+    motionHistory: jsonb("motion_history").notNull().default(sql`'[]'::jsonb`),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [index("items_meeting_idx").on(t.meetingId)],
+);
+
+export const itemRecusals = pgTable(
+  "item_recusals",
+  {
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => meetingItems.id),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id),
+    reason: text("reason").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.memberId] })],
+);
+
+export const voteValue = pgEnum("vote_value", ["for", "against", "abstain"]);
+
+export const votes = pgTable(
+  "votes",
+  {
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => meetingItems.id),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id),
+    vote: voteValue("vote").notNull(),
+    castAt: timestamp("cast_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.memberId] })],
+);
+
+/** Times a member is free for a meeting; on-call windows earn the availability stipend. */
+export const availability = pgTable(
+  "availability",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    onCall: boolean("on_call").notNull().default(false),
+    stipendRecorded: boolean("stipend_recorded").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("availability_member_idx").on(t.memberId)],
+);
+
+export const earningKind = pgEnum("earning_kind", [
+  "expedited_review",
+  "full_board_primary_review",
+  "full_board_secondary_review",
+  "meeting_attendance",
+  "on_call_hour",
+]);
+
+export const payRates = pgTable("pay_rates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: earningKind("kind").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  effectiveFrom: timestamp("effective_from", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const payouts = pgTable("payouts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  periodEnd: date("period_end").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One row per paid piece of work. Never tied to a decision (FDA IRB FAQ 8). */
+export const earnings = pgTable(
+  "earnings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => members.id),
+    kind: earningKind("kind").notNull(),
+    /** What was done: a review assignment, meeting, or availability window id. */
+    refId: uuid("ref_id").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    amountCents: integer("amount_cents").notNull(),
+    earnedAt: timestamp("earned_at", { withTimezone: true }).notNull().defaultNow(),
+    periodEnd: date("period_end").notNull(),
+    payoutId: uuid("payout_id").references(() => payouts.id),
+  },
+  (t) => [
+    uniqueIndex("earnings_once_per_work").on(t.memberId, t.kind, t.refId),
+    index("earnings_member_idx").on(t.memberId),
+  ],
+);

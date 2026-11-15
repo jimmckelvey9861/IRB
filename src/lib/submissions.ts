@@ -27,6 +27,8 @@ import type { User } from "./auth/service";
 import { sha256 } from "./canonical";
 import { signRecord } from "./esign";
 import { PermissionError, requireRole } from "./members";
+import { recordEarning } from "./pay";
+import { reviewEarningKind } from "@/domain/earnings";
 
 export const NewStudySchema = z.object({
   title: z.string().trim().min(5),
@@ -354,6 +356,8 @@ export async function completeReview(tx: Tx, actor: User, assignmentId: string, 
     })
     .where(eq(reviewAssignments.id, assignmentId));
   await addAudit(tx, actor, "review.completed", "submission", submission.id, { assignmentId, decision: record.decision });
+  // Pay depends only on the work done (FDA IRB FAQ 8).
+  await recordEarning(tx, member.id, reviewEarningKind({ path, role: assignment.role }), assignmentId);
 
   if (path === "expedited") {
     await applyExpeditedDecision(tx, actor, submission, study, input);
@@ -370,7 +374,7 @@ export async function completeReview(tx: Tx, actor: User, assignmentId: string, 
   return { ok: true as const };
 }
 
-function addMonths(isoDate: string, months: number): string {
+export function addMonths(isoDate: string, months: number): string {
   const d = new Date(`${isoDate}T00:00:00Z`);
   d.setUTCMonth(d.getUTCMonth() + months);
   d.setUTCDate(d.getUTCDate() - 1);
@@ -384,51 +388,76 @@ async function applyExpeditedDecision(
   study: typeof studies.$inferSelect,
   input: ReviewInput,
 ) {
-  const decidedAt = new Date();
   if (input.decision === "refer_to_full_board") {
     await tx.update(submissions).set({ path: "full_board", pathBasis: "Referred to the full board by the expedited reviewer" }).where(eq(submissions.id, submission.id));
     await addAudit(tx, actor, "submission.referred_to_full_board", "submission", submission.id, { reason: input.explanation ?? "" });
     await assignReviewers(tx, submission.id);
     return;
   }
-  const status = input.decision === "approve" ? "approved" : "modifications_required";
-  await tx.update(submissions).set({ status, decidedAt }).where(eq(submissions.id, submission.id));
-  let expires: string | null = null;
-  if (input.decision === "approve") {
-    expires = addMonths(isoToday(), input.approvalMonths!);
-    await tx.update(studies).set({ approvalExpiresOn: expires }).where(eq(studies.id, study.id));
-  }
-  await addAudit(tx, actor, "submission.decided", "submission", submission.id, { status, approvalExpiresOn: expires }, { status: submission.status });
-  await issueLetter(tx, submission, study, actor, input, expires);
+  await applyDecision(tx, actor, submission, study, {
+    decision: input.decision === "approve" ? "approve" : "require_modifications",
+    explanation: input.explanation ?? null,
+    approvalMonths: input.approvalMonths ?? null,
+    reviewType: `Expedited (${submission.pathBasis ?? "21 CFR 56.110"})`,
+    decidedBy: `${actor.fullName}, designated IRB reviewer. This decision was electronically signed.`,
+  });
 }
 
-async function issueLetter(
+export interface DecisionToApply {
+  decision: "approve" | "require_modifications" | "disapprove";
+  explanation: string | null;
+  approvalMonths: number | null;
+  reviewType: string;
+  decidedBy: string;
+}
+
+/** Records an IRB decision on a submission and sends the investigator a written letter (21 CFR 56.109(e)). */
+export async function applyDecision(
   tx: Tx,
+  actor: User | null,
   submission: typeof submissions.$inferSelect,
   study: typeof studies.$inferSelect,
-  reviewer: User,
-  input: ReviewInput,
-  expires: string | null,
+  d: DecisionToApply,
 ) {
+  const status = d.decision === "approve" ? "approved" : d.decision === "disapprove" ? "disapproved" : "modifications_required";
+  await tx.update(submissions).set({ status, decidedAt: new Date() }).where(eq(submissions.id, submission.id));
+  let expires: string | null = null;
+  if (d.decision === "approve") {
+    expires = addMonths(isoToday(), d.approvalMonths!);
+    await tx.update(studies).set({ approvalExpiresOn: expires }).where(eq(studies.id, study.id));
+  }
+  await recordAudit(tx, {
+    actorUserId: actor?.id ?? null,
+    actorName: actor?.fullName ?? "system",
+    action: "submission.decided",
+    entityType: "submission",
+    entityId: submission.id,
+    before: { status: submission.status },
+    after: { status, approvalExpiresOn: expires },
+  });
+
   const [pi] = await tx.select().from(users).where(eq(users.id, study.principalInvestigatorId)).limit(1);
-  const today = isoToday();
-  const approved = input.decision === "approve";
-  const subject = `${study.irbNumber}: ${approved ? "Approved" : "Modifications required"}`;
+  const kindLabel = submission.kind === "initial" ? "Initial review" : "Amendment";
+  const subject = `${study.irbNumber}: ${d.decision === "approve" ? "Approved" : d.decision === "disapprove" ? "Disapproved" : "Modifications required"}`;
+  const outcome =
+    d.decision === "approve"
+      ? `The IRB has approved this research. Approval is valid through ${expires}. Continuing review must be completed before that date or approval lapses and all research activity must stop (21 CFR 56.109(f)).`
+      : d.decision === "disapprove"
+        ? `The IRB has disapproved this research. The reasons are:\n\n${d.explanation}\n\nYou may respond in person or in writing (21 CFR 56.109(e)).`
+        : `The IRB requires the following changes before the research can be approved. Please revise and resubmit:\n\n${d.explanation}`;
   const body = [
-    `Date: ${today}`,
+    `Date: ${isoToday()}`,
     `To: ${pi.fullName}, Principal Investigator`,
     `Study: ${study.title} (${study.irbNumber})`,
     `Sponsor: ${study.sponsor}`,
-    `Submission: ${submission.kind === "initial" ? "Initial review" : "Amendment"}`,
-    `Review type: Expedited (${submission.pathBasis ?? "21 CFR 56.110"})`,
+    `Submission: ${kindLabel}`,
+    `Review type: ${d.reviewType}`,
     "",
-    approved
-      ? `The IRB has approved this research. Approval is valid through ${expires}. Continuing review must be completed before that date or approval lapses and all research activity must stop (21 CFR 56.109(f)).`
-      : `The IRB requires the following changes before the research can be approved. Please revise and resubmit:\n\n${input.explanation}`,
+    outcome,
     "",
     "You must promptly report to the IRB any unanticipated problems involving risks to subjects or others, and you may not make changes to the research without IRB approval except where necessary to eliminate apparent immediate hazards to subjects (21 CFR 56.108).",
     "",
-    `Reviewed by: ${reviewer.fullName}, designated IRB reviewer. This decision was electronically signed.`,
+    `Decided by: ${d.decidedBy}`,
   ].join("\n");
   const [letter] = await tx
     .insert(letters)
