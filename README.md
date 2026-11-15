@@ -12,7 +12,7 @@ qualified human members, as the regulations require.
 
 ## Status
 
-Stages 1 (core review loop) and 2 (meetings, oversight, pay) are built. Stage 3 is next. Done so far:
+Stages 1 (core review loop) and 2 (meetings, oversight, pay) are built; stage 3 (accreditation and go-live) is in progress. Done so far:
 
 - Tamper-evident audit trail: permanent, hash-chained entries the database refuses to change (21 CFR 11.10(e))
 - Sign-in with password plus authenticator code, account lockout, idle and absolute session timeouts (21 CFR 11.300)
@@ -29,6 +29,10 @@ Stages 1 (core review loop) and 2 (meetings, oversight, pay) are built. Stage 3 
 - Yearly continuing review and amendments; reminders 60, 30, 14, 7 and 1 days before approval ends; studies marked lapsed the day after
 - Problem reports: chair or member signs a determination; the system drafts the FDA and institutional reports for the organizational official to sign; suspension and termination
 - In-app notices for new reviews, decisions, reminders and reports
+- Policies and procedures: 15 starter SOPs, versioned, approved by the official's e-signature, frozen once approved, reviewed yearly, read-and-confirm by members
+- Training records with 3-year renewal and reminders; untrained or expired members are not assigned reviews
+- Public page (`/concern`) where participants can raise a complaint or question without signing in and check for the reply with a reference code
+- Quality dashboard with targets and a signed quarterly review
 - Member earnings: flat rate per completed review or meeting plus an on-call stipend, paid weekly, never tied to the decision
 
 **Use made-up data only** until the system runs on a HIPAA-covered hosting account.

@@ -57,6 +57,13 @@
       "when": 1794781195500,
       "tag": "0007_oversight",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794782864880,
+      "tag": "0008_stage3",
+      "breakpoints": true
     }
   ]
 }

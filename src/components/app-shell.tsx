@@ -10,11 +10,18 @@ const NAV = [
   { href: "/meetings", label: "Meetings" },
   { href: "/earnings", label: "Availability & pay" },
   { href: "/roster", label: "Board roster" },
+  { href: "/policies", label: "Policies" },
+  { href: "/training", label: "Training" },
   { href: "/audit", label: "Audit trail" },
+];
+const OVERSIGHT = [
+  { href: "/complaints", label: "Concerns" },
+  { href: "/quality", label: "Quality" },
 ];
 
 export function AppShell({ user, children }: { user: User; children: ReactNode }) {
-  const nav = user.roles.includes("administrator") ? [...NAV, { href: "/pay", label: "Pay admin" }] : NAV;
+  const leads = user.roles.some((r) => r === "administrator" || r === "chair" || r === "official");
+  const nav = [...NAV, ...(leads ? OVERSIGHT : []), ...(user.roles.includes("administrator") ? [{ href: "/pay", label: "Pay admin" }] : [])];
   return (
     <div className="flex min-h-full flex-col">
       <header className="border-b border-neutral-200 dark:border-neutral-800">

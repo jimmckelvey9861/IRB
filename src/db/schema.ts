@@ -540,3 +540,113 @@ export const notifications = pgTable(
   },
   (t) => [index("notifications_user_idx").on(t.userId), uniqueIndex("notifications_dedupe").on(t.userId, t.dedupeKey)],
 );
+
+// ---------------------------------------------------------------------------------------------
+// Stage 3: policies, training, complaints, quality review
+// ---------------------------------------------------------------------------------------------
+
+/** A written procedure (SOP). Its text lives in versions; only one version is in effect at a time. */
+export const policies = pgTable("policies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: text("code").notNull().unique(),
+  title: text("title").notNull(),
+  sources: text("sources").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const policyVersionStatus = pgEnum("policy_version_status", ["draft", "in_effect", "superseded"]);
+
+export const policyVersions = pgTable(
+  "policy_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    policyId: uuid("policy_id")
+      .notNull()
+      .references(() => policies.id),
+    version: integer("version").notNull(),
+    body: text("body").notNull(),
+    bodyHash: text("body_hash").notNull(),
+    changeSummary: text("change_summary").notNull().default(""),
+    status: policyVersionStatus("status").notNull().default("draft"),
+    draftedById: uuid("drafted_by_id").references(() => users.id),
+    approvedById: uuid("approved_by_id").references(() => users.id),
+    signatureId: uuid("signature_id"),
+    effectiveFrom: date("effective_from"),
+    /** AAHRPP expects policies to be reviewed periodically; we use yearly. */
+    reviewDueOn: date("review_due_on"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("policy_versions_unique").on(t.policyId, t.version)],
+);
+
+/** A person confirms they have read a version in effect. */
+export const policyAcknowledgments = pgTable(
+  "policy_acknowledgments",
+  {
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => policyVersions.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.versionId, t.userId] })],
+);
+
+/** A completed course. Kept permanently as evidence of qualification. */
+export const trainingRecords = pgTable(
+  "training_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    course: text("course").notNull(),
+    completedOn: date("completed_on").notNull(),
+    expiresOn: date("expires_on"),
+    /** Certificate number, provider, or other evidence. */
+    evidence: text("evidence").notNull().default(""),
+    recordedById: uuid("recorded_by_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("training_user_idx").on(t.userId)],
+);
+
+export const complaintStatus = pgEnum("complaint_status", ["open", "responded", "referred"]);
+
+/** A complaint, question or concern from a participant or anyone else (AAHRPP I-4). */
+export const complaints = pgTable("complaints", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Short code given to the person so they can follow up without an account. */
+  reference: text("reference").notNull().unique(),
+  studyReference: text("study_reference").notNull().default(""),
+  studyId: uuid("study_id").references(() => studies.id),
+  fromRole: text("from_role").notNull(),
+  message: text("message").notNull(),
+  contactName: text("contact_name").notNull().default(""),
+  contactDetail: text("contact_detail").notNull().default(""),
+  status: complaintStatus("status").notNull().default("open"),
+  response: text("response"),
+  respondedById: uuid("responded_by_id").references(() => users.id),
+  respondedAt: timestamp("responded_at", { withTimezone: true }),
+  eventReportId: uuid("event_report_id").references(() => eventReports.id),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** The quarterly quality review, signed by the reviewer (AAHRPP I-5). */
+export const qaReviews = pgTable("qa_reviews", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  metrics: jsonb("metrics").notNull(),
+  findings: text("findings").notNull(),
+  actions: text("actions").notNull(),
+  signedById: uuid("signed_by_id")
+    .notNull()
+    .references(() => users.id),
+  signatureId: uuid("signature_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -1,3 +1,4 @@
+import { humanSubjectsCurrent } from "./training";
 /**
  * Board composition rules. Pure functions with no database access, so they are easy to test
  * and to show an inspector.
@@ -138,13 +139,15 @@ export function evaluateComposition(roster: RosterMember[], today: string = isoT
   }
 
   for (const m of current) {
-    if (!m.trainingCompletedOn) {
+    if (!humanSubjectsCurrent(m.trainingCompletedOn, today)) {
       issues.push({
         code: "training-missing",
         severity: "warning",
-        rule: "AAHRPP I.1.E, II.1.B",
+        rule: "AAHRPP Standards I-1, II-1",
         memberId: m.id,
-        message: `${m.name} has no recorded human-subjects training; they will not be assigned reviews.`,
+        message: m.trainingCompletedOn
+          ? `${m.name}'s human-subjects training from ${m.trainingCompletedOn} has expired; they will not be assigned reviews until it is renewed.`
+          : `${m.name} has no recorded human-subjects training; they will not be assigned reviews.`,
       });
     }
   }

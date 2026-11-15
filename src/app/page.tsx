@@ -4,15 +4,15 @@ import { verifyAuditChain } from "@/lib/audit";
 import { requireUser } from "@/lib/auth/session";
 import { boardStatus } from "@/lib/members";
 import { myNotifications } from "@/lib/notify";
-import { runOversightSweep } from "@/lib/oversight";
+import { runDailyJobs } from "@/lib/daily";
 import { dismissNotice } from "./studies/actions";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Card } from "@/components/ui";
 
 export default async function Overview() {
   const user = await requireUser();
-  // The sweep is idempotent; until a scheduled job runs it daily on the hosting account, opening the overview runs it.
-  await db.transaction((tx) => runOversightSweep(tx));
+  // The daily jobs are idempotent; until a scheduled job runs it daily on the hosting account, opening the overview runs it.
+  await db.transaction((tx) => runDailyJobs(tx));
   const [{ report, roster }, chain, notices] = await Promise.all([boardStatus(db), verifyAuditChain(db), myNotifications(db, user.id)]);
   const unread = notices.filter((n) => !n.readAt);
   const blocking = report.issues.filter((i) => i.severity === "blocking");

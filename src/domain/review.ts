@@ -5,6 +5,8 @@
  * Sources: 21 CFR 56.107(e), 56.109, 56.110, 56.111; FDA IRB FAQ 20; AAHRPP II.1.D, II.1.E, II.2.F, II.3.
  */
 
+import { humanSubjectsCurrent } from "./training";
+
 /** FDA/OHRP expedited review categories (63 FR 60364, Nov 9 1998), short labels. */
 export const EXPEDITED_CATEGORIES = [
   { id: 1, label: "Drug or device study where no IND/IDE is required (or device used per its clearance)" },
@@ -94,7 +96,7 @@ function eligible(m: CandidateMember, input: SelectionInput): boolean {
   return (
     m.status === "active" &&
     (!m.termEndsOn || m.termEndsOn >= input.today) &&
-    !!m.trainingCompletedOn &&
+    humanSubjectsCurrent(m.trainingCompletedOn, input.today) &&
     !input.conflictedMemberIds.includes(m.id) &&
     !(input.excludeMemberIds ?? []).includes(m.id)
   );

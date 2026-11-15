@@ -15,7 +15,11 @@ Sources: [21 CFR 56](https://www.ecfr.gov/current/title-21/chapter-I/subchapter-
 | REQ-56.107 | At least 5 members; scientist, nonscientist, unaffiliated; not one profession; gender diversity effort | `src/domain/roster.ts` `evaluateComposition` | `src/domain/roster.test.ts` | Done |
 | REQ-FAQ15 | Alternates formally linked to the primaries they replace, with comparable qualifications | `src/domain/roster.ts` `checkAlternate` | `src/domain/roster.test.ts` | Done |
 | REQ-AAHRPP-I.1.B | Members appointed by the organizational official | `src/lib/members.ts` `appointMember` | `src/lib/foundation.integration.test.ts` | Done |
-| REQ-AAHRPP-II.1.B | Members trained before reviewing | `src/domain/roster.ts` (warning) | `src/domain/roster.test.ts` | Partial: routing block comes with routing |
+| REQ-AAHRPP-II-1 | Members trained before reviewing; training renewed every 3 years; reminders before it expires | `src/domain/training.ts`; `selectReviewers` skips untrained or expired members; `src/lib/training.ts` | `src/domain/review.test.ts`, `src/lib/stage3.integration.test.ts` | Done |
+| REQ-11.10(i) | People who use the system are trained to do so | `src/domain/training.ts` course "system" required for every role | `src/lib/stage3.integration.test.ts` | Done |
+| REQ-AAHRPP-I-1 | Written policies and procedures, approved by the organization, kept current, communicated to members | `src/domain/policy-library.ts` (15 starter SOPs), `src/lib/policies.ts`; approved text frozen by trigger (`drizzle/0008_stage3.sql`) | `src/lib/stage3.integration.test.ts` | Done (starter texts need expert review before approval) |
+| REQ-AAHRPP-I-4 | Participants and others can raise complaints, questions and concerns, and get answers | `src/app/concern` (public, no sign-in), `src/lib/complaints.ts` | `src/lib/stage3.integration.test.ts` | Done |
+| REQ-AAHRPP-I-5 | Quality improvement: measures, periodic signed review, yearly policy review | `src/lib/quality.ts`, `src/app/quality`, `policyReviewSweep` | `src/lib/stage3.integration.test.ts` | Done |
 | REQ-11.10(d),(g) | Access limited to authorized people; authority checks | `src/lib/auth/session.ts`, `src/lib/members.ts` `requireRole` | `src/lib/foundation.integration.test.ts` | Done |
 | REQ-11.10(e) | Secure, time-stamped, permanent audit trail | `src/lib/audit.ts`, `drizzle/0001_audit_immutability.sql` | `src/lib/foundation.integration.test.ts` | Done |
 | REQ-11.50 | Signature shows printed name, date/time, meaning | `src/lib/esign.ts` | `src/lib/foundation.integration.test.ts` | Done |
