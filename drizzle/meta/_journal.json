@@ -22,6 +22,62 @@
       "when": 1794762878594,
       "tag": "0002_session_enrollment",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794763459046,
+      "tag": "0003_studies_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794763527017,
+      "tag": "0004_letters_immutable",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794780563450,
+      "tag": "0005_meetings_pay",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794780640913,
+      "tag": "0006_motion_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794781195500,
+      "tag": "0007_oversight",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794782864880,
+      "tag": "0008_stage3",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794783554350,
+      "tag": "0009_email_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794784539233,
+      "tag": "0010_settings",
+      "breakpoints": true
     }
   ]
 }

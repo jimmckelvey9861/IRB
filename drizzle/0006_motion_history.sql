@@ -1,0 +1,1 @@
+ALTER TABLE "meeting_items" ADD COLUMN "motion_history" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -1,18 +1,21 @@
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth/session";
 import { boardStatus } from "@/lib/members";
+import { quorumPolicy } from "@/lib/settings";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Card, ErrorNote, Field, PrimaryButton, Select } from "@/components/ui";
-import { addMember, appoint } from "./actions";
+import { addMember, appoint, changeQuorumPolicy, toggleExperienced } from "./actions";
 
 export default async function RosterPage({ searchParams }: PageProps<"/roster">) {
   const user = await requireUser();
   const { error, ok } = await searchParams;
   const { roster, report } = await boardStatus(db);
+  const policy = await quorumPolicy(db);
   const primaries = roster.filter((m) => m.membershipType === "primary");
   const nameOf = (id: string) => roster.find((m) => m.id === id)?.name ?? "unknown";
   const isAdmin = user.roles.includes("administrator");
   const isOfficial = user.roles.includes("official");
+  const isChair = user.roles.includes("chair");
 
   return (
     <AppShell user={user}>
@@ -43,6 +46,26 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
         </Card>
       </div>
 
+      <div className="mt-6">
+        <Card title="Quorum for full-board meetings (21 CFR 56.108(c))">
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            <li>The board has {primaries.length} seats. Quorum is a majority of seats ({Math.floor(primaries.length / 2) + 1}), counted per agenda item, and must include a nonscientist.</li>
+            <li>Members of the pool sit only as the primary for a seat or as an alternate listed for it, and only in a seat of the same kind. A seat counts once.</li>
+            <li>Attendance must be live (in person, video or phone) with the materials reviewed; recused members do not count.</li>
+            <li>
+              House policy: {policy.requireAllSeats ? <Badge tone="good">on</Badge> : <Badge tone="neutral">off</Badge>} every seat filled and an unaffiliated member present before the board acts.
+            </li>
+          </ul>
+          {isOfficial && (
+            <form action={changeQuorumPolicy} className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <input type="hidden" name="requireAllSeats" value={policy.requireAllSeats ? "no" : "yes"} />
+              <input name="password" type="password" required placeholder="Your password, to sign" className="rounded border border-neutral-300 px-2 py-2 dark:border-neutral-700" />
+              <button className="rounded-md border border-neutral-400 px-3 py-2">{policy.requireAllSeats ? "Turn off the house policy (legal minimum only)" : "Turn on the house policy"}</button>
+            </form>
+          )}
+        </Card>
+      </div>
+
       <div className="mt-6 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-neutral-200 text-neutral-500 dark:border-neutral-800">
@@ -53,6 +76,7 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
               <th className="py-2 pr-4">Affiliated</th>
               <th className="py-2 pr-4">Profession</th>
               <th className="py-2 pr-4">Training</th>
+              <th className="py-2 pr-4" title="Designated by the chair to do expedited reviews (21 CFR 56.110(b))">Expedited reviewer</th>
               <th className="py-2">Status</th>
             </tr>
           </thead>
@@ -70,6 +94,19 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
                 <td className="py-2 pr-4">{m.affiliated ? "Yes" : "No"}</td>
                 <td className="py-2 pr-4">{m.profession}</td>
                 <td className="py-2 pr-4">{m.trainingCompletedOn ?? <Badge tone="warn">none</Badge>}</td>
+                <td className="py-2 pr-4">
+                  {isChair ? (
+                    <form action={toggleExperienced}>
+                      <input type="hidden" name="memberId" value={m.id} />
+                      <input type="hidden" name="value" value={m.experiencedReviewer ? "no" : "yes"} />
+                      <button className="underline">{m.experiencedReviewer ? "Yes (remove)" : "No (designate)"}</button>
+                    </form>
+                  ) : m.experiencedReviewer ? (
+                    "Yes"
+                  ) : (
+                    "No"
+                  )}
+                </td>
                 <td className="py-2">
                   {m.status === "active" && <Badge tone="good">Appointed</Badge>}
                   {m.status === "inactive" && <Badge tone="neutral">Inactive</Badge>}
@@ -95,7 +132,7 @@ export default async function RosterPage({ searchParams }: PageProps<"/roster">)
             ))}
             {roster.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-neutral-500">
+                <td colSpan={8} className="py-6 text-center text-neutral-500">
                   No members yet.
                 </td>
               </tr>

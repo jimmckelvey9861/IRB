@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth/session";
 import { PermissionError, appointMember, createMember } from "@/lib/members";
+import { setQuorumPolicy } from "@/lib/settings";
 
 function back(params: Record<string, string>): never {
   redirect(`/roster?${new URLSearchParams(params).toString()}`);
@@ -56,4 +57,33 @@ export async function appoint(formData: FormData) {
   }
   revalidatePath("/roster");
   back({ ok: "Appointment signed." });
+}
+
+export async function toggleExperienced(formData: FormData) {
+  const actor = await requireUser();
+  const { setExperiencedReviewer } = await import("@/lib/submissions");
+  try {
+    await db.transaction((tx) =>
+      setExperiencedReviewer(tx, actor, String(formData.get("memberId")), formData.get("value") === "yes"),
+    );
+  } catch (e) {
+    back({ error: (e as Error).message });
+  }
+  revalidatePath("/roster");
+  back({ ok: "Expedited reviewer designation updated." });
+}
+
+export async function changeQuorumPolicy(formData: FormData) {
+  const actor = await requireUser();
+  let r;
+  try {
+    r = await db.transaction((tx) =>
+      setQuorumPolicy(tx, actor, { requireAllSeats: formData.get("requireAllSeats") === "yes" }, String(formData.get("password") ?? "")),
+    );
+  } catch (e) {
+    back({ error: (e as Error).message });
+  }
+  if (!r.ok) back({ error: r.problem });
+  revalidatePath("/roster");
+  back({ ok: "Quorum policy updated." });
 }
