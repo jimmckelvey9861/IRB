@@ -155,7 +155,11 @@ export const signatures = pgTable(
   (t) => [index("signatures_entity_idx").on(t.entityType, t.entityId)],
 );
 
-export const studyStatus = pgEnum("study_status", ["active", "closed"]);
+/**
+ * - lapsed: approval expired before continuing review (21 CFR 56.109(f)); research must stop
+ * - suspended / terminated: the IRB withdrew approval (21 CFR 56.113)
+ */
+export const studyStatus = pgEnum("study_status", ["active", "closed", "lapsed", "suspended", "terminated"]);
 
 /** A research study (protocol) overseen by the IRB. */
 export const studies = pgTable("studies", {
@@ -176,7 +180,7 @@ export const studies = pgTable("studies", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const submissionKind = pgEnum("submission_kind", ["initial", "amendment"]);
+export const submissionKind = pgEnum("submission_kind", ["initial", "amendment", "continuing"]);
 export const submissionStatus = pgEnum("submission_status", [
   "draft",
   "in_review",
@@ -213,6 +217,8 @@ export const submissions = pgTable(
     path: reviewPath("path"),
     pathBasis: text("path_basis"),
     consultantNeeded: boolean("consultant_needed").notNull().default(false),
+    /** Continuing review only: the investigator's progress report (enrollment, withdrawals, problems). */
+    progressReport: jsonb("progress_report"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -449,4 +455,88 @@ export const earnings = pgTable(
     uniqueIndex("earnings_once_per_work").on(t.memberId, t.kind, t.refId),
     index("earnings_member_idx").on(t.memberId),
   ],
+);
+
+
+// ---------------------------------------------------------------------------------------------
+// Stage 2: ongoing oversight (problem reports, regulatory reports, notifications)
+// ---------------------------------------------------------------------------------------------
+
+export const eventKind = pgEnum("event_kind", [
+  "unanticipated_problem",
+  "adverse_event",
+  "protocol_deviation",
+  "noncompliance",
+  "complaint",
+  "other",
+]);
+export const eventStatus = pgEnum("event_status", ["awaiting_determination", "determined"]);
+
+/** Something reported to the IRB about an approved study (21 CFR 56.108(b), 56.113; AAHRPP II.2.G). */
+export const eventReports = pgTable(
+  "event_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    studyId: uuid("study_id")
+      .notNull()
+      .references(() => studies.id),
+    reportedById: uuid("reported_by_id")
+      .notNull()
+      .references(() => users.id),
+    kind: eventKind("kind").notNull(),
+    occurredOn: date("occurred_on").notNull(),
+    description: text("description").notNull(),
+    status: eventStatus("status").notNull().default("awaiting_determination"),
+    /** The IRB's finding: { isUnanticipatedProblem, noncompliance, action, rationale }. */
+    determination: jsonb("determination"),
+    determinedById: uuid("determined_by_id").references(() => users.id),
+    determinedAt: timestamp("determined_at", { withTimezone: true }),
+    signatureId: uuid("signature_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("event_reports_study_idx").on(t.studyId)],
+);
+
+export const regulatoryReportKind = pgEnum("regulatory_report_kind", [
+  "unanticipated_problem",
+  "serious_noncompliance",
+  "continuing_noncompliance",
+  "suspension",
+  "termination",
+]);
+export const regulatoryReportStatus = pgEnum("regulatory_report_status", ["draft", "signed"]);
+
+/** A report the IRB must promptly send to the investigator, the institution and FDA (21 CFR 56.108(b)). */
+export const regulatoryReports = pgTable("regulatory_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventReportId: uuid("event_report_id")
+    .notNull()
+    .references(() => eventReports.id),
+  kind: regulatoryReportKind("kind").notNull(),
+  recipients: text("recipients").notNull(),
+  body: text("body").notNull(),
+  bodyHash: text("body_hash").notNull(),
+  status: regulatoryReportStatus("status").notNull().default("draft"),
+  signedById: uuid("signed_by_id").references(() => users.id),
+  signatureId: uuid("signature_id"),
+  signedAt: timestamp("signed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** In-app notices. dedupeKey stops the daily sweep from repeating a reminder. */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    subject: text("subject").notNull(),
+    body: text("body").notNull().default(""),
+    link: text("link").notNull().default(""),
+    dedupeKey: text("dedupe_key"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId), uniqueIndex("notifications_dedupe").on(t.userId, t.dedupeKey)],
 );

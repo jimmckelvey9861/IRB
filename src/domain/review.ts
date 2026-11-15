@@ -18,7 +18,7 @@ export const EXPEDITED_CATEGORIES = [
   { id: 9, label: "Continuing review of non-IND research where the board found no more than minimal risk" },
 ] as const;
 
-export type SubmissionKind = "initial" | "amendment";
+export type SubmissionKind = "initial" | "amendment" | "continuing";
 export type ReviewPath = "expedited" | "full_board";
 
 export interface PathInput {
@@ -35,7 +35,19 @@ export function proposePath(input: PathInput): { path: ReviewPath; basis: string
   if (input.kind === "amendment" && input.minorChange) {
     return { path: "expedited", basis: "Minor change to previously approved research (21 CFR 56.110(b)(2))" };
   }
-  if (input.minimalRisk && input.expeditedCategory && EXPEDITED_CATEGORIES.some((c) => c.id === input.expeditedCategory)) {
+  // Categories 8 and 9 cover continuing review of research that is not itself minimal risk.
+  if (input.kind === "continuing" && (input.expeditedCategory === 8 || input.expeditedCategory === 9)) {
+    return {
+      path: "expedited",
+      basis: `Continuing review, expedited category ${input.expeditedCategory} (21 CFR 56.110(b)(1))`,
+    };
+  }
+  if (
+    input.minimalRisk &&
+    input.expeditedCategory &&
+    input.expeditedCategory <= 7 &&
+    EXPEDITED_CATEGORIES.some((c) => c.id === input.expeditedCategory)
+  ) {
     return {
       path: "expedited",
       basis: `Minimal risk, expedited category ${input.expeditedCategory} (21 CFR 56.110(b)(1))`,

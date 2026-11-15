@@ -19,11 +19,16 @@ export default async function SubmissionPage({ params, searchParams }: PageProps
   const needsAttention = [...check.missingRequired, ...check.missingAdditional];
   const isOwner = study.principalInvestigatorId === user.id || user.roles.includes("administrator");
   const editable = isOwner && submission.status === "draft";
+  const progress = submission.progressReport as
+    | { enrolledTotal: number; enrolledSinceLastReview: number; withdrawn: number; enrollmentOpen: boolean; problemsSummary: string }
+    | null;
   const isIrb = user.roles.some((r) => r === "member" || r === "chair" || r === "official" || r === "administrator");
 
   return (
     <AppShell user={user}>
-      <p className="font-mono text-xs text-neutral-500">{study.irbNumber}</p>
+      <p className="font-mono text-xs text-neutral-500">
+        <a className="underline" href={`/studies/${study.id}`}>{study.irbNumber}</a> · {{ initial: "Initial review", amendment: "Amendment", continuing: "Continuing review" }[submission.kind]}
+      </p>
       <h1 className="text-2xl font-semibold">{study.title}</h1>
       <p className="mt-2 flex flex-wrap items-center gap-3 text-sm">
         <StatusBadge status={submission.status} />
@@ -105,6 +110,15 @@ export default async function SubmissionPage({ params, searchParams }: PageProps
 
         <Card title="Summary">
           <p className="text-sm whitespace-pre-wrap">{submission.summary}</p>
+          {progress && (
+            <ul className="mt-3 grid gap-1 text-sm md:grid-cols-2">
+              <li>Enrolled in total: {progress.enrolledTotal}</li>
+              <li>Enrolled since last review: {progress.enrolledSinceLastReview}</li>
+              <li>Withdrawn or lost: {progress.withdrawn}</li>
+              <li>Enrollment {progress.enrollmentOpen ? "open" : "closed"}</li>
+              {progress.problemsSummary && <li className="md:col-span-2">Problems and new information: {progress.problemsSummary}</li>}
+            </ul>
+          )}
         </Card>
       </div>
     </AppShell>

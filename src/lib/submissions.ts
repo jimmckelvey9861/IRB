@@ -29,6 +29,8 @@ import { signRecord } from "./esign";
 import { PermissionError, requireRole } from "./members";
 import { recordEarning } from "./pay";
 import { reviewEarningKind } from "@/domain/earnings";
+import { renewedExpiry } from "@/domain/oversight";
+import { notify } from "./notify";
 
 export const NewStudySchema = z.object({
   title: z.string().trim().min(5),
@@ -212,9 +214,14 @@ export async function assignReviewers(tx: Tx, submissionId: string) {
   const filledRoles = new Set(existing.filter((e) => e.status !== "withdrawn_conflict").map((e) => e.role));
   const toAdd = selection.reviewers.filter((r) => !filledRoles.has(r.role));
   if (toAdd.length) {
-    await tx.insert(reviewAssignments).values(
-      toAdd.map((r) => ({ submissionId, memberId: r.memberId, role: r.role, reason: r.reason })),
-    );
+    const added = await tx
+      .insert(reviewAssignments)
+      .values(toAdd.map((r) => ({ submissionId, memberId: r.memberId, role: r.role, reason: r.reason })))
+      .returning();
+    for (const a of added) {
+      const [m] = await tx.select({ userId: members.userId }).from(members).where(eq(members.id, a.memberId)).limit(1);
+      await notify(tx, [m.userId], { subject: `New review: ${study.irbNumber}`, body: study.title, link: `/reviews/${a.id}` });
+    }
   }
   if (selection.consultantNeeded !== submission.consultantNeeded) {
     await tx.update(submissions).set({ consultantNeeded: selection.consultantNeeded }).where(eq(submissions.id, submissionId));
@@ -421,10 +428,18 @@ export async function applyDecision(
 ) {
   const status = d.decision === "approve" ? "approved" : d.decision === "disapprove" ? "disapproved" : "modifications_required";
   await tx.update(submissions).set({ status, decidedAt: new Date() }).where(eq(submissions.id, submission.id));
-  let expires: string | null = null;
-  if (d.decision === "approve") {
-    expires = addMonths(isoToday(), d.approvalMonths!);
-    await tx.update(studies).set({ approvalExpiresOn: expires }).where(eq(studies.id, study.id));
+  let expires: string | null = study.approvalExpiresOn;
+  if (d.decision === "approve" && submission.kind !== "amendment") {
+    // An initial approval starts the clock; a continuing review extends it without losing days.
+    // An approved amendment changes the research but not the approval period.
+    expires =
+      submission.kind === "continuing"
+        ? renewedExpiry(study.approvalExpiresOn, isoToday(), d.approvalMonths!)
+        : addMonths(isoToday(), d.approvalMonths!);
+    await tx
+      .update(studies)
+      .set({ approvalExpiresOn: expires, ...(study.status === "lapsed" ? { status: "active" as const } : {}) })
+      .where(eq(studies.id, study.id));
   }
   await recordAudit(tx, {
     actorUserId: actor?.id ?? null,
@@ -437,11 +452,11 @@ export async function applyDecision(
   });
 
   const [pi] = await tx.select().from(users).where(eq(users.id, study.principalInvestigatorId)).limit(1);
-  const kindLabel = submission.kind === "initial" ? "Initial review" : "Amendment";
+  const kindLabel = { initial: "Initial review", amendment: "Amendment", continuing: "Continuing review" }[submission.kind];
   const subject = `${study.irbNumber}: ${d.decision === "approve" ? "Approved" : d.decision === "disapprove" ? "Disapproved" : "Modifications required"}`;
   const outcome =
     d.decision === "approve"
-      ? `The IRB has approved this research. Approval is valid through ${expires}. Continuing review must be completed before that date or approval lapses and all research activity must stop (21 CFR 56.109(f)).`
+      ? `The IRB has approved this ${submission.kind === "amendment" ? "change to the research. The study's approval period is unchanged and remains" : "research. Approval is"} valid through ${expires}. Continuing review must be completed before that date or approval lapses and all research activity must stop (21 CFR 56.109(f)).`
       : d.decision === "disapprove"
         ? `The IRB has disapproved this research. The reasons are:\n\n${d.explanation}\n\nYou may respond in person or in writing (21 CFR 56.109(e)).`
         : `The IRB requires the following changes before the research can be approved. Please revise and resubmit:\n\n${d.explanation}`;
@@ -471,6 +486,7 @@ export async function applyDecision(
     entityId: submission.id,
     after: { letterId: letter.id, subject, bodyHash: letter.bodyHash },
   });
+  await notify(tx, [study.principalInvestigatorId], { subject, body: "A decision letter has been issued.", link: `/submissions/${submission.id}` });
   return letter;
 }
 

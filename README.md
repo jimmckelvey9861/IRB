@@ -12,7 +12,7 @@ qualified human members, as the regulations require.
 
 ## Status
 
-Stage 1 (core review loop) is in progress. Done so far:
+Stages 1 (core review loop) and 2 (meetings, oversight, pay) are built. Stage 3 is next. Done so far:
 
 - Tamper-evident audit trail: permanent, hash-chained entries the database refuses to change (21 CFR 11.10(e))
 - Sign-in with password plus authenticator code, account lockout, idle and absolute session timeouts (21 CFR 11.300)
@@ -25,6 +25,11 @@ Stage 1 (core review loop) is in progress. Done so far:
 - Approval-criteria checklist (21 CFR 56.111) with no answers pre-filled, signed electronically
 - Expedited decisions issue the investigator's letter immediately; full-board studies wait for the meeting (stage 2)
 - Phone-friendly review screens
+- Board meetings: automatic scheduling from member availability, live quorum meter, alternates, recusals, phone voting, minutes generated from the record and signed by the chair
+- Yearly continuing review and amendments; reminders 60, 30, 14, 7 and 1 days before approval ends; studies marked lapsed the day after
+- Problem reports: chair or member signs a determination; the system drafts the FDA and institutional reports for the organizational official to sign; suspension and termination
+- In-app notices for new reviews, decisions, reminders and reports
+- Member earnings: flat rate per completed review or meeting plus an on-call stipend, paid weekly, never tied to the decision
 
 **Use made-up data only** until the system runs on a HIPAA-covered hosting account.
 
@@ -38,6 +43,7 @@ cp .env.example .env.local       # adjust the database URLs
 npm run db:migrate
 npm run db:seed                  # made-up demo users and members
 npm run dev
+npm run daily                    # renewal reminders and lapse check; schedule once a day in production
 ```
 
 Demo accounts (all `@demo.test`, password printed by the seed script): `admin` adds members, `official`
